@@ -1,0 +1,103 @@
+# Data
+female=c(4, 3, 4, 6, 2, 5, 2, 4, 1, 3, 4, 2, 2, 5, 3)
+male=c(6, 5, 2, 2, 5, 4, 3, 3, 5, 7, 5, 6, 2, 5, 2)
+
+
+# 1. Mean and variances
+mf <- mean(female)
+mm <- mean(male)
+
+varf <- var(female)
+varm <- var(male)
+
+# 2. Poisson fit with mean
+pf_female <- exp(-mf)*mf^female/factorial(female) # e(-lambda) * lambda^x / x!
+pf_male <- exp(-mm)*mm^male/factorial(male)
+
+# relative frequencies
+data_f <- cbind(female,pf_female)
+data_f <- unique(data_f[order(female),])
+table(female)/length(female)
+data_f
+
+data_m <- cbind(male,pf_male)
+data_m <- unique(data_m[order(male),])
+data_m
+table(male)/length(male)
+
+f <- as.numeric(names(table(female)))
+m <- as.numeric(names(table(male)))
+f_fitted <- exp(-mf) * mf^f / factorial(f)
+m_fitted <- exp(-mm) * mm^m / factorial(m)
+
+
+par(mfrow = c(2,2))
+barplot(table(female)/length(female), main = "Female observed frequencies")
+barplot(table(male)/length(male), main = "Male observed frequencies")
+barplot(f_fitted, main='Female fitted frequencies')
+barplot(m_fitted, main='Male fitted frequencies')
+dev.off()
+
+# The fit seems okish... could be better but sample size is quite small
+
+
+
+# 3. Testing null hypotheses of no gender effect using poisson and negative binomial regression 
+data <- data.frame(typo = c(female,male), gender = c(rep("f",15), rep("m",15)))
+
+# Poisson regression
+
+fitPois <- glm(typo ~ gender, data = data, family = "poisson")
+summary(fitPois)
+
+# there seems to be no gender effect, estimate ist 0.2151, pvalue = 0.258 --> we cannot reject the null hypothesis of no effect
+
+# Negative Binomial
+library(MASS)
+fitNB <- glm.nb(typo ~ gender, data = data)
+summary(fitNB)
+
+# In this data example, there is no much overdispersion, which means that the Negative Binomial Regression gives (almost) the same results
+# as the Poisson regression
+
+
+# 4. Calculating treatment effect using means for Poisson and Negative Binomial Regression
+log(mf/mm) # log(lambda_female / lambda_male)
+# Calculation of standard error for Poisson Regression
+sqrt(mf/15/mf^2 + mm/15/mm^2)
+
+# Calculation of standard error for Negative Binomial Regression using Theta, here (almost) yields the same result as the Poisson Regression
+# usually they are different and therefore, we get different p-values (normally)
+sqrt(((mf+(mf^2/107961))/15)/mf^2 + ((mm+(mm^2/107961 ))/15)/mm^2)
+
+
+# 5. Simulation study for poisson regression
+n1 <- c(10,15,20,50)
+n2 <- c(10,15,20,50)
+
+lambda1 <- 3
+lambda2 <- 3
+
+
+mysimu <- function(n1,n2,nsim){
+  res <- rep(0,nsim)
+  for(i in 1:nsim){
+    x <- rpois(n1, lambda1)
+    y <- rpois(n2, lambda2)
+    data <- data.frame(y = c(x,y), x = c(rep(1,n1), rep(2,n2)))
+    
+    pval <- summary(glm(y ~ x, family ="poisson", data = data))$coefficients[2,4]
+    if (pval < 0.05) {res[i] <- 1}
+  }
+  result <- data.frame(n1 = n1, n2= n2, lambda1 = lambda1, lambda2 = lambda2,
+                         nsim = nsim, Poisson = mean(res))
+  print(result)
+}
+set.seed(1)
+for(h in 1:length(n1)){
+  for(hh in 1:length(n2)){
+    mysimu(n1[h], n2[hh], 10000)
+  }
+}
+
+# The Poisson Regression does control the 5% alpha level quite well, even for small sample sizes
